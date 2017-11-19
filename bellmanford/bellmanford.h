@@ -16,11 +16,13 @@
 
 #define MAX 100
 #define INFINITE 10000
+#define ERRORTRIES 1
 
 typedef struct distanceVector{
     int used;
     int destination;
     int firstNode;
+    int errors;
     double coust;
 }DistanceVector;
 
@@ -40,7 +42,7 @@ DvTable getInitialRoutingTable(list_t* links, router_t* id);
 void printDvTable(DvTable table);
 DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poison);
 DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated);
-
+DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, int* updated);
 #include "bellmanford.c"
 
 #endif

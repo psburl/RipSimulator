@@ -35,16 +35,19 @@ typedef struct receiverArg{
 	router_t* router;
 	list_t* routers;
 	list_t* neighboors;
+	MessageData data;
 
 }ReceiverArg;
 
 typedef struct senderArg{
 	
 	list_t* routers;
-
+	list_t* neighboors;
 }SenderArg;
 
 DvTable table;
+
+void send_to_next(void* senderArg, MessageData* data);
 
 void updateTable(DvTable newTable){
 	pthread_mutex_lock(&mutex);
@@ -91,13 +94,48 @@ router_t* getRouter(list_t* routers, int id){
 	return NULL;
 }
 
+void resend(list_t* routers, list_t* neighboors, int id){
+	printf("resending table(updated)...\n");	
+	node_t* node = neighboors->head;
+	while(node != NULL){
+
+		link_t* link = (link_t*)(node->data);
+		int nId = link->router1 == id ? link->router2: link->router1;
+		DvMessage message = mountMessage(table, neighboors, nId, 1);
+		SenderArg arg;
+		arg.routers = routers;
+		arg.neighboors = neighboors;
+		MessageData messageData;
+		messageData.routerId = nId;
+		messageData.dvMessage = message;
+		messageData.type = TYPE_TABLE;
+		send_to_next(&arg, &messageData);
+
+		node = node->next;
+	}
+}
+
+void* updateWhenError(void* senderArg){
+
+	SenderArg* arg = (SenderArg*)senderArg;
+	list_t* routers = arg->routers;
+	list_t* neighboors = arg->neighboors;
+	resend(routers, neighboors, table.origin.id);
+	return 0;
+}
 
 void send_to_next(void* senderArg, MessageData* data){
 
-	list_t* routers = ((SenderArg*)senderArg)->routers;
+	SenderArg* arg = (SenderArg*)senderArg;
+	list_t* routers = arg->routers;
 	int node = table.info[table.origin.id][data->routerId].firstNode;
 
 	if(table.info[table.origin.id][data->routerId].used == 0){
+		printf("sender: unreacheable\n");
+		return;
+	}
+
+	if(table.info[table.origin.id][data->routerId].coust == INFINITE){
 		printf("sender: unreacheable\n");
 		return;
 	}
@@ -148,28 +186,50 @@ void send_to_next(void* senderArg, MessageData* data){
 		if(ack)
 			break;
 	}
-	if(!ack)
+	if(!ack){
 		printf("It's not possible to send package\n");
+		int updated;
+		list_t* neighboors = arg->neighboors;
+		DvTable newTable = updateErrorToSend(table, neighboors, neighboor->id, &updated);
+		if(updated){
+			updateTable(newTable);
+			printDvTable(newTable);
+			updateWhenError(arg);
+		}
+	}
 }
 
-void send_table(int id, list_t* routers, list_t* neighboors){
+void* send_table(void* argReceiver){
 	
-	node_t* node = neighboors->head;
-    while(node != NULL){
+	ReceiverArg* arg = (ReceiverArg*)argReceiver;
+	int id = arg->router->id;
+	list_t* routers = arg->routers;
+	list_t* neighboors = arg->neighboors;
 
-		link_t* link = (link_t*)(node->data);
-        int nId = link->router1 == id ? link->router2: link->router1;
-		DvMessage message = mountMessage(table, neighboors, nId, 1);
-		SenderArg arg;
-		arg.routers = routers;
-		MessageData messageData;
-		messageData.routerId = nId;
-		messageData.dvMessage = message;
-		messageData.type = TYPE_TABLE;
-		send_to_next(&arg, &messageData);
+	while(1){
+		printf("resending table...\n");
+		node_t* node = neighboors->head;
+		while(node != NULL){
 
-        node = node->next;
-    }
+			link_t* link = (link_t*)(node->data);
+			int nId = link->router1 == id ? link->router2: link->router1;
+			DvMessage message = mountMessage(table, neighboors, nId, 1);
+			SenderArg arg;
+			arg.routers = routers;
+			arg.neighboors = neighboors;
+			MessageData messageData;
+			messageData.routerId = nId;
+			messageData.dvMessage = message;
+			messageData.type = TYPE_TABLE;
+			send_to_next(&arg, &messageData);
+
+			node = node->next;
+		}
+		printf("table refresh finished..waiting\n");
+		sleep (20);
+	}
+
+	return 0;
 }
 
 void* call_sender(void* arg_router){
@@ -181,11 +241,25 @@ void* call_sender(void* arg_router){
     return 0;
 }
 
+void* makeUpdate(void* argReceiver){
+	ReceiverArg* arg = (ReceiverArg*)argReceiver;
+	int updated = 0;
+	DvTable newTable = updateMyTable(table, arg->neighboors, arg->data.dvMessage, &updated);
+	updateTable(newTable);
+	printDvTable(table);
+	if(updated){
+		int id = arg->router->id;
+		list_t* routers = arg->routers;
+		list_t* neighboors = arg->neighboors;
+		resend(routers, neighboors, id);
+	}
+	return 0;
+}
+
 void* call_receiver(void* argReceiver){
 
 	ReceiverArg* arg = (ReceiverArg*)argReceiver;
 	router_t* router = arg->router;
-	list_t* neighboors = arg->neighboors;
 	
     SocketAddress currentSocket, destinationSocket;     
     int socketId, receivedDataLength;
@@ -223,13 +297,9 @@ void* call_receiver(void* argReceiver){
 			}
 		}
 		else{
-			int updated = 0;
-			DvTable newTable = updateMyTable(table, neighboors, data->dvMessage, &updated);
-			updateTable(newTable);
-			printDvTable(table);
-			if(updated){
-				send_table(router->id, arg->routers, neighboors);
-			}
+			arg->data = *data;
+			pthread_t thread; 
+			pthread_create(&thread, NULL, makeUpdate, arg);
 		}
         
         int ack = 1;
@@ -242,11 +312,12 @@ void* call_receiver(void* argReceiver){
 }
 
 void start_operation(SenderArg* sender, ReceiverArg* receiver){
-	pthread_t threads[2];
+	pthread_t threads[3];
 	pthread_create(&(threads[0]), NULL, call_receiver, receiver);
-	send_table(receiver->router->id,receiver->routers,receiver->neighboors);
+	pthread_create(&(threads[2]), NULL, send_table, receiver);
 	pthread_create(&(threads[1]), NULL, call_sender, sender);
 	pthread_join(threads[1], NULL);
+	pthread_join(threads[2], NULL);
 	pthread_join(threads[0], NULL);
 }
 
@@ -288,7 +359,7 @@ int main(int argc, char **argv){
 
 	SenderArg arg;
 	arg.routers = routers;
-
+	arg.neighboors = neighboors;
 	ReceiverArg rec;
 	rec.router  = router;
 	rec.neighboors = neighboors;

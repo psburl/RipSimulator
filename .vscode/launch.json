@@ -17,7 +17,7 @@
                 "type": "cppdbg",
                 "request": "launch",
                 "program": "/home/psburl/Documents/Rip/program",
-                "args": ["4"],
+                "args": ["3"],
                 "stopAtEntry": false,
                 "cwd": "/home/psburl/Documents/Rip",
                 "environment": [],
