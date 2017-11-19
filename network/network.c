@@ -58,7 +58,6 @@ list_t* read_routers(){
 	while(element != NULL){ 
 
 		char* data = ((char*)element->data);
-		printf("%s\n", data);
 		router_t* router = new_router();
 		list_t* columns = string_split(data, "\t");
 		router->id = atoi((char*)list_get_element(columns, 0)->data);
@@ -71,7 +70,7 @@ list_t* read_routers(){
 	return list;
 }
 
-list_t* read_links(){
+list_t* read_links(int myId){
 
 	list_t* list = new_list(sizeof(link_t));
 	char* router_config = file_read("inputs/enlaces.config");
@@ -79,14 +78,16 @@ list_t* read_links(){
 
 	node_t* element = lines->head;
 	while(element != NULL){ 
-
+		
 		char* data = ((char*)element->data);
 		link_t* link = new_link();
 		list_t* columns = string_split(data, "\t");
 		link->router1 = atoi((char*)list_get_element(columns, 0)->data);
 		link->router2 = atoi((char*)list_get_element(columns, 1)->data);
-		link->coust = atof((char*)list_get_element(columns, 2)->data);
-		list_append(list, link);
+		if(myId == link->router1 || myId == link->router2){
+			link->coust = atof((char*)list_get_element(columns, 2)->data);
+			list_append(list, link);
+		}
 		element = element->next;
 	}
 

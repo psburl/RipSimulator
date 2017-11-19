@@ -10,11 +10,14 @@
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
+#include "bellmanford/bellmanford.h"
 
 #define BUFLEN 100  //Max length of buffer
 #define SocketAddress struct sockaddr_in
 #define TIMEOUT 5
 #define TRIES 3
+#define TYPE_MESSAGE 1
+#define TYPE_TABLE 2
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -22,8 +25,32 @@ typedef struct MessageData{
 	
 	int routerId;
 	char message[BUFLEN];
+	int type;
+	DvMessage dvMessage;
 
 }MessageData;
+
+typedef struct receiverArg{
+	
+	router_t* router;
+	list_t* routers;
+	list_t* neighboors;
+
+}ReceiverArg;
+
+typedef struct senderArg{
+	
+	list_t* routers;
+
+}SenderArg;
+
+DvTable table;
+
+void updateTable(DvTable newTable){
+	pthread_mutex_lock(&mutex);
+	table = newTable;
+	pthread_mutex_unlock(&mutex);
+}
 
 MessageData* NewMessageData(){
 
@@ -41,6 +68,7 @@ MessageData* GetMessage(){
 	fflush(stdout);
 	fflush(stdin);
 	fgets(data->message, BUFLEN, stdin);
+	data->type = TYPE_MESSAGE;
 	return data;
 }
 
@@ -49,7 +77,37 @@ void die(char *s){
     exit(1);
 }
 
-void send_to_next(router_t* router, MessageData* data){
+router_t* getRouter(list_t* routers, int id){
+
+	node_t* element = routers->head;
+	while(element!=NULL){
+
+		router_t* router = (router_t*)(element->data);
+		if(router->id == id)
+			return router;
+
+		element = element->next;
+	}
+	return NULL;
+}
+
+
+void send_to_next(void* senderArg, MessageData* data){
+
+	list_t* routers = ((SenderArg*)senderArg)->routers;
+	int node = table.info[table.origin.id][data->routerId].firstNode;
+
+	if(table.info[table.origin.id][data->routerId].used == 0){
+		printf("sender: unreacheable\n");
+		return;
+	}
+
+	router_t* neighboor = getRouter(routers, node);
+
+	if(neighboor == NULL){
+		printf("sender: unreacheable\n");
+		return;
+	}
 
 	SocketAddress socketAddress;
     int socketId;
@@ -61,30 +119,7 @@ void send_to_next(router_t* router, MessageData* data){
     memset((char *) &socketAddress, 0, sizeof(socketAddress));
     socketAddress.sin_family = AF_INET;
 
-	node_t* node = (node_t*)list_get_by_data((router->routingTable), &(data->routerId), compare_dest_path);
 	
-	if(node == NULL){
-		printf("sender: router with id %d not exist", data->routerId);
-		return;
-	}
-	// get table info with path to send package
-	graph_path_t* routerToSend = (graph_path_t*)node->data;
-
-	if(routerToSend == NULL){
-		printf("sender: unreacheable\n");
-		return;
-	}
-	// get first neighboor to send package
-	if(routerToSend->start == NULL){
-		printf("sender: unreacheable\n");
-		return;
-	}
-
-	router_t* neighboor = (router_t*)routerToSend->start->data;
-	if(neighboor == NULL){
-		printf("sender: unreacheable\n");
-		return;
-	}
 	// send message to correct port
 	socketAddress.sin_port = htons(neighboor->port);
  	// set ip to destination ip
@@ -98,7 +133,7 @@ void send_to_next(router_t* router, MessageData* data){
 	int ack = 0;
 	while(tries--){
 
-		if (sendto(socketId, data, sizeof(data)+(BUFLEN) , 0 , (struct sockaddr *) &socketAddress, slen)==-1)
+		if (sendto(socketId, data, sizeof(data)+(BUFLEN)+sizeof(DistanceVector)*MAX , 0 , (struct sockaddr *) &socketAddress, slen)==-1)
 			die("sender: sendto()\n");
 				
 		struct timeval read_timeout;
@@ -117,19 +152,41 @@ void send_to_next(router_t* router, MessageData* data){
 		printf("It's not possible to send package\n");
 }
 
+void send_table(int id, list_t* routers, list_t* neighboors){
+	
+	node_t* node = neighboors->head;
+    while(node != NULL){
+
+		link_t* link = (link_t*)(node->data);
+        int nId = link->router1 == id ? link->router2: link->router1;
+		DvMessage message = mountMessage(table, neighboors, nId, 1);
+		SenderArg arg;
+		arg.routers = routers;
+		MessageData messageData;
+		messageData.routerId = nId;
+		messageData.dvMessage = message;
+		messageData.type = TYPE_TABLE;
+		send_to_next(&arg, &messageData);
+
+        node = node->next;
+    }
+}
+
 void* call_sender(void* arg_router){
 
-	router_t* router = (router_t*)arg_router;  
     while(1){
 		MessageData* data = GetMessage();
-		send_to_next(router, data);
+		send_to_next(arg_router, data);
     }	
     return 0;
 }
 
-void* call_receiver(void* arg_router){
+void* call_receiver(void* argReceiver){
 
-	router_t* router = (router_t*)arg_router;
+	ReceiverArg* arg = (ReceiverArg*)argReceiver;
+	router_t* router = arg->router;
+	list_t* neighboors = arg->neighboors;
+	
     SocketAddress currentSocket, destinationSocket;     
     int socketId, receivedDataLength;
     socklen_t slen = sizeof(destinationSocket);
@@ -152,18 +209,28 @@ void* call_receiver(void* arg_router){
     	MessageData* data = NewMessageData();
         fflush(stdout);
 
-        if ((receivedDataLength = recvfrom(socketId, data, sizeof(data)+(BUFLEN), 0, (void*)&destinationSocket, &slen)) == -1)
+        if ((receivedDataLength = recvfrom(socketId, data, sizeof(data)+(BUFLEN)+sizeof(DistanceVector)*MAX, 0, (void*)&destinationSocket, &slen)) == -1)
             die("receiver: recvfrom()\n");
          
         printf("\nreceiver: Received packet from %s:%d\n", inet_ntoa(destinationSocket.sin_addr), ntohs(destinationSocket.sin_port));
         
-        if(data->routerId == router->id)
-        	printf("Data: %s\n" , data->message);
-		
+		if(data->type == TYPE_MESSAGE){
+			if(data->routerId == router->id)
+				printf("Data: %s\n" , data->message);
+			else{
+				printf("package will be sent to router: %d\n" , data->routerId);
+				send_to_next(router, data);
+			}
+		}
 		else{
-        	printf("package will be sent to router: %d\n" , data->routerId);
-        	send_to_next(router, data);
-        }
+			int updated = 0;
+			DvTable newTable = updateMyTable(table, neighboors, data->dvMessage, &updated);
+			updateTable(newTable);
+			printDvTable(table);
+			if(updated){
+				send_table(router->id, arg->routers, neighboors);
+			}
+		}
         
         int ack = 1;
         if (sendto(socketId, &ack, sizeof(ack), 0, (void*)&destinationSocket, slen) == -1)
@@ -174,10 +241,11 @@ void* call_receiver(void* arg_router){
     return 0;
 }
 
-void start_operation(router_t* router){
+void start_operation(SenderArg* sender, ReceiverArg* receiver){
 	pthread_t threads[2];
-	pthread_create(&(threads[0]), NULL, call_receiver, router);
-	pthread_create(&(threads[1]), NULL, call_sender, router);
+	pthread_create(&(threads[0]), NULL, call_receiver, receiver);
+	send_table(receiver->router->id,receiver->routers,receiver->neighboors);
+	pthread_create(&(threads[1]), NULL, call_sender, sender);
 	pthread_join(threads[1], NULL);
 	pthread_join(threads[0], NULL);
 }
@@ -203,7 +271,6 @@ void print_init(router_t* router){
 	printf("----------------------------------------------\n");
 	printf("Loading routing table...\n");
 	printf("----------------------------------------------\n");
-	list_print(router->routingTable, print_routingTable);
 	printf("----------------------------------------------\n");
 }
 
@@ -213,18 +280,21 @@ int main(int argc, char **argv){
 	printf("Starting router %d\n", router_id);
 
 	list_t* routers = read_routers();
-	list_t* links = read_links();
+	list_t* neighboors = read_links(router_id);
+	router_t* router = getRouter(routers, router_id);
 
-	graph_t* graph = graph_from_routers(routers, links);
+	table = getInitialRoutingTable(neighboors, router);
+	printDvTable(table);
 
-	list_t* routingTable = get_routing_table(graph, router_id);
+	SenderArg arg;
+	arg.routers = routers;
 
-	router_t* router = (router_t*)list_get_by_data(routers, &router_id, compare_id_to_router)->data;
-	router->routingTable = routingTable;
-
-	print_init(router);	
-
-	start_operation(router);
-
+	ReceiverArg rec;
+	rec.router  = router;
+	rec.neighboors = neighboors;
+	rec.routers = routers;
+	
+	start_operation(&arg, &rec);
+	
 	return 0;
 }

@@ -27,7 +27,7 @@ void print_link(void* link);
 void print_path(void* v);
 int compare_router(void* r1, void* r2);
 list_t* read_routers();
-list_t* read_links();
+list_t* read_links(int myId);
 graph_t* graph_from_routers(list_t* routers, list_t* links);
 list_t* get_routing_table(graph_t* graph, int id_router);
 
