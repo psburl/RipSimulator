@@ -151,6 +151,14 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
 DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated){
 
     int i;
+    node_t* node = links->head;
+    while(node != NULL){
+        link_t* link = (link_t*)(node->data);
+        if(link->router1 == message.origin || link->router2 == message.origin)
+            link->dead = 0;
+        node = node->next;
+    }
+
     int coustToThis =  myTable.info[myTable.origin.id][message.origin].coust;
     for(i =0;i<message.count;i++){
 
@@ -280,10 +288,15 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
             link_t* link = (link_t*)(node->data);
             int nId = link->router1 == id ? link->router2: link->router1;
             
-            if(nId == destination)
-                 for(i = 0; i < MAX; i++)
-                    table.info[nId][i].coust = INFINITE;
-                                
+            if(nId == destination){
+                link->dead = 1;
+                for(i = 0; i < MAX; i++)
+                   table.info[nId][i].coust = INFINITE;
+            }
+            else if(link->dead == 0 && table.info[table.origin.id][nId].coust > link->coust){
+                table.info[table.origin.id][nId].coust = link->coust;
+                table.info[table.origin.id][nId].firstNode = nId;
+            }                   
             node = node->next;
         }
     }

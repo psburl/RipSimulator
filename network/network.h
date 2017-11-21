@@ -16,6 +16,7 @@ typedef struct link_t{
 
 	int router1;
 	int router2;
+	int dead;
 	double coust;
 
 }link_t;
