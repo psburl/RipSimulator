@@ -84,6 +84,7 @@ void printDvTable(DvTable table){
                 printf("----------------");
     printf("\n");
     
+    
      for(i = 0; i < MAX; i++){
         if(i != table.origin.id)
             continue;
@@ -143,6 +144,7 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
         }  
     }
 
+    
     return message;
 }
 
@@ -154,7 +156,7 @@ DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* up
 
         DistanceVector vector = message.info[i];
         DistanceVector myVector = myTable.info[myTable.origin.id][vector.destination];
-
+        memcpy(&message.info[message.origin],&vector, sizeof(vector));
         int sum = vector.coust + coustToThis;
         if(sum >= INFINITE && message.origin == vector.destination){
             int j;
@@ -174,6 +176,7 @@ DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* up
                 if(myVector.coust != sum){
                     *updated = 1;
                     myVector.coust = INFINITE;
+                    
                     node_t* node = links->head;
                     while(node != NULL){
 
@@ -213,11 +216,45 @@ DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* up
                 node = node->next;
             }
         }
-
+        
         myTable.info[myTable.origin.id][vector.destination] = myVector;
         myTable.info[message.origin][vector.destination] = vector;
     }
 
+    for(i =0;i<MAX;i++){
+        DistanceVector vector = myTable.info[myTable.origin.id][i];
+        if(vector.used == 0)
+            continue;
+        if(vector.coust == INFINITE){
+            int j;
+            for(j =0;j<MAX;j++){
+                DistanceVector other = myTable.info[myTable.origin.id][j];
+                if(other.used == 0)
+                    continue;
+                if(other.firstNode == i && other.firstNode != other.destination){
+                    other.coust = INFINITE;
+                    other.firstNode = -1;
+                    myTable.info[myTable.origin.id][j] = other;
+
+                    node_t* node = links->head;
+                    while(node != NULL){
+                        link_t* link = (link_t*)(node->data);
+                        if(link->router1 == myTable.origin.id || link->router2 == myTable.origin.id){
+                            int id = link->router1 == myTable.origin.id ? link->router2: link->router1;
+                            if(id == j){
+                                DistanceVector vector = myTable.info[myTable.origin.id][id];
+                                if(vector.coust > link->coust){
+                                    myTable.info[myTable.origin.id][id].coust = link->coust;
+                                    myTable.info[myTable.origin.id][id].firstNode = id;
+                                }
+                            }
+                        }
+                        node = node->next;
+                    }
+                }
+             }
+        }
+    }
     
     return myTable;
 }
@@ -246,13 +283,7 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
             if(nId == destination)
                  for(i = 0; i < MAX; i++)
                     table.info[nId][i].coust = INFINITE;
-            else{
-                if(table.info[nId][destination].coust < table.info[id][destination].coust){
-                    table.info[id][destination].coust = table.info[nId][destination].coust;
-                    table.info[id][destination].firstNode = nId;
-                }
-            }
-            
+                                
             node = node->next;
         }
     }
