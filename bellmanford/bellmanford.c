@@ -137,14 +137,13 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
 
             DistanceVector vector = myTable.info[myId][j];
             memcpy(&message.info[message.count],&vector, sizeof(vector));
-            if(poison && destination == vector.firstNode && destination != j)
+            if(poison && destination == vector.firstNode)
                 message.info[message.count].coust = INFINITE;
             message.info[message.count].destination = j;
             message.count++;
         }  
     }
 
-    
     return message;
 }
 
@@ -275,28 +274,25 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
         table.info[id][destination].errors++;
     else{
         table.info[id][destination].errors = 0;
+        
         *updated = 1;
 
-        int i;
-        for(i = 0; i < MAX; i++)
-            if(table.info[id][i].used == 1 && table.info[id][i].firstNode == destination)
-                table.info[id][i].coust = INFINITE;
-            
+        table.info[id][destination].coust = INFINITE;
+        table.info[destination][id].coust = INFINITE;
+
         node_t* node = neighboors->head;
         while(node != NULL){
 
             link_t* link = (link_t*)(node->data);
             int nId = link->router1 == id ? link->router2: link->router1;
             
-            if(nId == destination){
-                link->dead = 1;
-                for(i = 0; i < MAX; i++)
-                   table.info[nId][i].coust = INFINITE;
+            if(nId != destination){
+                double sum = link->coust + table.info[nId][destination].coust;
+                if(table.info[id][destination].coust > sum){
+                    table.info[id][destination].coust = sum;
+                    table.info[id][destination].firstNode = nId;
+                }                   
             }
-            else if(link->dead == 0 && table.info[table.origin.id][nId].coust > link->coust){
-                table.info[table.origin.id][nId].coust = link->coust;
-                table.info[table.origin.id][nId].firstNode = nId;
-            }                   
             node = node->next;
         }
     }
