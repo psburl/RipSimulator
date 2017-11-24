@@ -191,10 +191,9 @@ void send_to_next(void* senderArg, MessageData* data){
 		int updated;
 		list_t* neighboors = arg->neighboors;
 		DvTable newTable = updateErrorToSend(table, neighboors, neighboor->id, &updated);
-		updateTable(newTable);
-		printDvTable(newTable);
 		if(updated){
-			
+			updateTable(newTable);
+			printDvTable(newTable);
 			updateWhenError(arg);
 		}
 	}
@@ -227,7 +226,7 @@ void* send_table(void* argReceiver){
 			node = node->next;
 		}
 		printf("table refresh finished..waiting\n");
-		sleep (20);
+		sleep (5+(id*3));
 	}
 
 	return 0;
