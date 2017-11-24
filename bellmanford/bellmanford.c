@@ -81,9 +81,6 @@ void printDvTable(DvTable table){
             
             DistanceVector vector = table.info[i][j];
             if(vector.used == 0){
-                if(table.info[table.origin.id][j].used == 1)
-                    printf("%d-INFINITE\t|",j);
-
                 continue;
             }
 
@@ -119,123 +116,117 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
         }  
     }
 
+    printf("SEND TO %d\n",destination);
+    for(j=0;j<message.count;j++){
+        
+        DistanceVector vector = message.info[j];
+        if(vector.used == 0){
+            continue;
+        }
+
+        if(vector.coust>=INFINITE)
+            printf("%d-INFINITE--|", vector.destination);
+        else 
+            printf("%d-%4.2lf(%d)--|", vector.destination, vector.coust, vector.firstNode);
+    } 
+
     return message;
 }
 
 DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated){
 
-    int i;
-    node_t* node = links->head;
-    while(node != NULL){
-        link_t* link = (link_t*)(node->data);
-        if(link->router1 == message.origin || link->router2 == message.origin)
-            link->dead = 0;
-        node = node->next;
-    }
-
-    int coustToThis =  myTable.info[myTable.origin.id][message.origin].coust;
-    for(i =0;i<message.count;i++){
-
-        DistanceVector vector = message.info[i];
-        DistanceVector myVector = myTable.info[myTable.origin.id][vector.destination];
-        memcpy(&message.info[message.origin],&vector, sizeof(vector));
-        int sum = vector.coust + coustToThis;
-        if(sum >= INFINITE && message.origin == vector.destination){
-            int j;
-            for(j =0;j<message.count;j++){
-                if(message.info[j].destination == myTable.origin.id)
-                    sum = message.info[j].coust;
-            }
-        }   
+    int j;
+    printf("RECEIVE FROM %d\n", message.origin);
+    for(j=0;j<message.count;j++){
         
-        if(myVector.used == 1){
-            if(myVector.coust > sum){
-                *updated = 1;
-                myVector.firstNode = message.origin;
-                myVector.coust = sum;
-            }
-            if(myVector.firstNode == message.origin){
-                if(myVector.coust != sum){
-                    *updated = 1;
-                    myVector.coust = INFINITE;
-                    
-                    node_t* node = links->head;
-                    while(node != NULL){
-
-                        link_t* link = (link_t*)(node->data);
-                        int nId = link->router1 ==myTable.origin.id ? link->router2: link->router1;
-                        
-                        if(myTable.info[nId][message.origin].coust < myTable.info[myTable.origin.id][message.origin].coust){
-                            myTable.info[myTable.origin.id][message.origin].coust = myTable.info[nId][message.origin].coust + coustToThis;
-                            myTable.info[myTable.origin.id][message.origin].firstNode = nId;
-                        }
-                        
-                        node = node->next;
-                    }
-                }
-            }
+        DistanceVector vector = message.info[j];
+        if(vector.used == 0){
+            continue;
         }
-        else{
-            *updated = 1;
-            myVector.used = 1;
-            myVector.destination = vector.destination;
-            myVector.firstNode = myTable.info[myTable.origin.id][message.origin].firstNode;
-            myVector.coust = sum;
-            if(sum > INFINITE)
-                myVector.coust = INFINITE;
 
+        if(vector.coust>=INFINITE)
+            printf("%d-INFINITE--|", vector.destination);
+        else 
+            printf("%d-%4.2lf(%d)--|", vector.destination, vector.coust, vector.firstNode);
+    }            
+
+    int i;
+    for(i = 0; i < message.count; i++){
+
+        int destination = message.info[i].destination;
+
+        myTable.info[myTable.origin.id][destination].used = 1;
+
+        if(myTable.info[message.origin][destination].used ==0){
+            *updated = 1;
             node_t* node = links->head;
             while(node != NULL){
-
                 link_t* link = (link_t*)(node->data);
                 int nId = link->router1 == myTable.origin.id ? link->router2: link->router1;
-                DistanceVector column;
-                column.used = 1;
-                column.destination = vector.destination;
-                column.firstNode = message.origin;
-                column.coust = INFINITE;
-                myTable.info[nId][vector.destination] = column;
+                if(myTable.info[nId][destination].used == 0){
+                    myTable.info[nId][destination].used = 1;
+                    myTable.info[nId][destination].coust = INFINITE;
+                }
                 node = node->next;
             }
         }
         
-        myTable.info[myTable.origin.id][vector.destination] = myVector;
-        myTable.info[message.origin][vector.destination] = vector;
+        myTable.info[message.origin][destination].coust =  message.info[i].coust;
+        myTable.info[message.origin][destination].destination = message.info[i].destination;
     }
 
-    for(i =0;i<MAX;i++){
-        DistanceVector vector = myTable.info[myTable.origin.id][i];
-        if(vector.used == 0)
-            continue;
-        if(vector.coust == INFINITE){
-            int j;
-            for(j =0;j<MAX;j++){
-                DistanceVector other = myTable.info[myTable.origin.id][j];
-                if(other.used == 0)
-                    continue;
-                if(other.firstNode == i && other.firstNode != other.destination){
-                    other.coust = INFINITE;
-                    other.firstNode = -1;
-                    myTable.info[myTable.origin.id][j] = other;
+    for(i = 0; i < MAX; i++){
 
-                    node_t* node = links->head;
-                    while(node != NULL){
-                        link_t* link = (link_t*)(node->data);
-                        if(link->router1 == myTable.origin.id || link->router2 == myTable.origin.id){
-                            int id = link->router1 == myTable.origin.id ? link->router2: link->router1;
-                            if(id == j){
-                                DistanceVector vector = myTable.info[myTable.origin.id][id];
-                                if(vector.coust > link->coust){
-                                    myTable.info[myTable.origin.id][id].coust = link->coust;
-                                    myTable.info[myTable.origin.id][id].firstNode = id;
-                                }
-                            }
-                        }
-                        node = node->next;
-                    }
-                }
-             }
+        myTable.info[message.origin][i].coust =  message.info[i].coust;
+        myTable.info[message.origin][i].destination = message.info[i].destination;
+
+        myTable.info[myTable.origin.id][i].old =  myTable.info[myTable.origin.id][i].coust;
+        myTable.info[myTable.origin.id][i].coust = INFINITE;
+        if(i == myTable.origin.id)
+             myTable.info[myTable.origin.id][i].coust = 0.00;
+    }
+
+    for(i = 0; i < MAX; i++){
+
+        if(i == myTable.origin.id)
+            continue;
+
+        double coustToThis = INFINITE;
+        node_t* node = links->head;
+        while(node != NULL){
+            link_t* link = (link_t*)(node->data);
+            int nId = link->router1 == myTable.origin.id ? link->router2: link->router1;
+            if(nId == i)
+                coustToThis =  link->coust;
+
+            node = node->next;
         }
+
+        int j;
+        for(j=0; j < MAX; j++){
+
+            if(myTable.info[i][j].used == 0)
+                continue;
+
+            DistanceVector vector = myTable.info[i][j];
+
+            double sum = coustToThis + vector.coust;
+            if(myTable.info[myTable.origin.id][j].coust > sum){
+                myTable.info[myTable.origin.id][j].coust = sum;
+                myTable.info[myTable.origin.id][j].firstNode = i;
+                myTable.info[myTable.origin.id][j].destination = j;
+            }
+        }
+    }
+
+    for(i = 0; i < MAX; i++){
+
+        if(myTable.info[myTable.origin.id][i].used == 0)
+            continue;
+
+        if(myTable.info[myTable.origin.id][i].coust !=
+        myTable.info[myTable.origin.id][i].old)
+            *updated = 1;
     }
     
     return myTable;
@@ -261,7 +252,8 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
 
             link_t* link = (link_t*)(node->data);
             int nId = link->router1 == id ? link->router2: link->router1;
-            if(table.info[nId][id].used == 1 && table.info[nId][destination].used == 1 && nId != destination){
+            if(table.info[nId][id].used == 1 && 
+                table.info[nId][destination].used == 1 && nId != destination){
                 double sum = link->coust + table.info[nId][destination].coust;
                 if(table.info[id][destination].coust > sum){
                     table.info[id][destination].coust = sum;

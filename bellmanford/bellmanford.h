@@ -24,6 +24,7 @@ typedef struct distanceVector{
     int firstNode;
     int errors;
     double coust;
+    double old;
 }DistanceVector;
 
 

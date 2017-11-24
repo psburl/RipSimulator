@@ -191,9 +191,10 @@ void send_to_next(void* senderArg, MessageData* data){
 		int updated;
 		list_t* neighboors = arg->neighboors;
 		DvTable newTable = updateErrorToSend(table, neighboors, neighboor->id, &updated);
+		updateTable(newTable);
+		printDvTable(newTable);
 		if(updated){
-			updateTable(newTable);
-			printDvTable(newTable);
+			
 			updateWhenError(arg);
 		}
 	}
