@@ -248,20 +248,20 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
     if(table.info[id][destination].errors < ERRORTRIES-1)
         table.info[id][destination].errors++;
     else{
-        table.info[id][destination].errors = 0;
-        
+        table.info[id][destination].errors = 0;        
         *updated = 1;
-
         table.info[id][destination].coust = INFINITE;
-        table.info[destination][id].coust = INFINITE;
-
+        
+        int i;
+        for(i = 0; i < MAX; i++)
+            table.info[destination][i].used = 0;
+        
         node_t* node = neighboors->head;
         while(node != NULL){
 
             link_t* link = (link_t*)(node->data);
             int nId = link->router1 == id ? link->router2: link->router1;
-            
-            if(nId != destination){
+            if(table.info[nId][id].used == 1 && table.info[nId][destination].used == 1 && nId != destination){
                 double sum = link->coust + table.info[nId][destination].coust;
                 if(table.info[id][destination].coust > sum){
                     table.info[id][destination].coust = sum;
