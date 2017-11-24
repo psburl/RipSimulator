@@ -67,58 +67,33 @@ DvTable getInitialRoutingTable(list_t* links, router_t* router){
 }
 
 void printDvTable(DvTable table){
-
     int i, j;
-    printf("---------");
-    for(i = 0; i < MAX; i++)
-            if(table.info[table.origin.id][i].used)
-                printf("----------------");
-    printf("\n\t|\t");
-    for(i = 0; i < MAX; i++)
-            if(table.info[table.origin.id][i].used)
-                printf("%d\t|\t", table.info[table.origin.id][i].destination);
-    printf("\n");
-    printf("---------");
-    for(i = 0; i < MAX; i++)
-            if(table.info[table.origin.id][i].used)
-                printf("----------------");
-    printf("\n");
-    
-    
-     for(i = 0; i < MAX; i++){
-        if(i != table.origin.id)
+    printf("router %d....\n", table.origin.id);
+    for(i = 0; i < MAX; i++){
+
+        DistanceVector line = table.info[table.origin.id][i];
+        if(line.used == 0)
             continue;
 
-        printf("%d\t|", i);
-        int use=0;
-        for(j=0; j< MAX; j++){
+        printf("|%d|->", i);
+
+        for(j=0;j<MAX;j++){
+            
             DistanceVector vector = table.info[i][j];
-            use = vector.used;
-            if(use == 1){
-                if(vector.coust == INFINITE)
-                    printf("INFINITE\t|");
-                else{
-                    printf("%6.2lf(%d)\t|", vector.coust, vector.firstNode);
-                }
+            if(vector.used == 0){
+                if(table.info[table.origin.id][j].used == 1)
+                    printf("%d-INFINITE\t|",j);
+
+                continue;
             }
-        }
-        if(use){
-            printf("\n");
-            printf("---------");
-            int k;
-            for(k = 0; k < MAX; k++)
-                    if(table.info[table.origin.id][k].used)
-                        printf("----------------");
-            printf("\n");
-        }
+
+            if(vector.coust>=INFINITE)
+                printf("%d-INFINITE\t|",j);
+            else 
+                printf("%d-%4.2lf(%d)\t|", j, vector.coust, vector.firstNode);
+        }            
+        printf("\n");
     }
-    printf("\n");
-    printf("---------");
-    int k;
-    for(k = 0; k < MAX; k++)
-            if(table.info[table.origin.id][k].used)
-                printf("----------------");
-    printf("\n");
 }
 
 DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poison){
