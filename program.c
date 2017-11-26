@@ -136,19 +136,19 @@ void send_to_next(void* senderArg, MessageData* data){
 		node = data->routerId;
 
 	if(table.info[table.origin.id][data->routerId].used == 0){
-		printf("sender: unreacheable\n");
+		//printf("sender: unreacheable\n");
 		return;
 	}
 
 	if(table.info[table.origin.id][data->routerId].coust == INFINITE){
-		printf("sender: unreacheable\n");
+		//printf("sender: unreacheable\n");
 		return;
 	}
 
 	router_t* neighboor = getRouter(routers, node);
 
 	if(neighboor == NULL){
-		printf("sender: unreacheable\n");
+		//printf("sender: unreacheable\n");
 		return;
 	}
 
@@ -170,7 +170,8 @@ void send_to_next(void* senderArg, MessageData* data){
     	fprintf(stderr, "sender: inet_aton() failed\n");
     	exit(1);
 	}
-	printf("sender: sending packet to router %d\n", neighboor->id);
+
+	//printf("sender: sending packet to router %d\n", neighboor->id);
 
 	int tries = TRIES;
 	int ack = 0;
@@ -185,8 +186,7 @@ void send_to_next(void* senderArg, MessageData* data){
 		
 		setsockopt(socketId, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 		
-		if (recvfrom(socketId, &ack, sizeof(ack), 0, (struct sockaddr *) &socketAddress, &slen) == -1)
-			printf("Error send package, retrying\n");
+		recvfrom(socketId, &ack, sizeof(ack), 0, (struct sockaddr *) &socketAddress, &slen);
 		
 		if(ack)
 			break;
@@ -232,7 +232,7 @@ void* send_table(void* argReceiver){
 			node = node->next;
 		}
 		printf("table refresh finished..waiting\n");
-		sleep (5+(id*3));
+		sleep (10);
 	}
 
 	return 0;
@@ -292,7 +292,7 @@ void* call_receiver(void* argReceiver){
         if ((receivedDataLength = recvfrom(socketId, data, sizeof(data)+(BUFLEN)+sizeof(DistanceVector)*MAX, 0, (void*)&destinationSocket, &slen)) == -1)
             die("receiver: recvfrom()\n");
          
-        printf("\nreceiver: Received packet from %s:%d\n", inet_ntoa(destinationSocket.sin_addr), ntohs(destinationSocket.sin_port));
+        //printf("\nreceiver: Received packet from router %d\n", data->routerId);
         
 		if(data->type == TYPE_MESSAGE){
 			if(data->routerId == router->id)

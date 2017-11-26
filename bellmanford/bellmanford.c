@@ -118,9 +118,7 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
     return message;
 }
 
-DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated){
-
-    printf("RECEIVE FROM %d\n", message.origin);          
+DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated){     
 
     int i;
     for(i = 0; i < message.count; i++){
