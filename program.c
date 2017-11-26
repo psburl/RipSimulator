@@ -20,7 +20,6 @@
 #define TYPE_TABLE 2
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
 typedef struct MessageData{
 	
 	int routerId;
@@ -95,6 +94,7 @@ router_t* getRouter(list_t* routers, int id){
 }
 
 void resend(list_t* routers, list_t* neighboors, int id){
+
 	printf("resending table(updated)...\n");	
 	node_t* node = neighboors->head;
 	while(node != NULL){
@@ -109,6 +109,7 @@ void resend(list_t* routers, list_t* neighboors, int id){
 		messageData.routerId = nId;
 		messageData.dvMessage = message;
 		messageData.type = TYPE_TABLE;
+
 		send_to_next(&arg, &messageData);
 
 		node = node->next;
@@ -128,7 +129,11 @@ void send_to_next(void* senderArg, MessageData* data){
 
 	SenderArg* arg = (SenderArg*)senderArg;
 	list_t* routers = arg->routers;
+	
 	int node = table.info[table.origin.id][data->routerId].firstNode;
+
+	if(data->type == TYPE_TABLE)
+		node = data->routerId;
 
 	if(table.info[table.origin.id][data->routerId].used == 0){
 		printf("sender: unreacheable\n");
@@ -179,7 +184,7 @@ void send_to_next(void* senderArg, MessageData* data){
 		read_timeout.tv_usec = 10;
 		
 		setsockopt(socketId, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-
+		
 		if (recvfrom(socketId, &ack, sizeof(ack), 0, (struct sockaddr *) &socketAddress, &slen) == -1)
 			printf("Error send package, retrying\n");
 		
@@ -210,19 +215,20 @@ void* send_table(void* argReceiver){
 		printf("resending table...\n");
 		node_t* node = neighboors->head;
 		while(node != NULL){
-
+			
 			link_t* link = (link_t*)(node->data);
 			int nId = link->router1 == id ? link->router2: link->router1;
+			
 			DvMessage message = mountMessage(table, neighboors, nId, 1);
 			SenderArg arg;
 			arg.routers = routers;
 			arg.neighboors = neighboors;
 			MessageData messageData;
+			
 			messageData.routerId = nId;
 			messageData.dvMessage = message;
 			messageData.type = TYPE_TABLE;
 			send_to_next(&arg, &messageData);
-
 			node = node->next;
 		}
 		printf("table refresh finished..waiting\n");
@@ -293,7 +299,10 @@ void* call_receiver(void* argReceiver){
 				printf("Data: %s\n" , data->message);
 			else{
 				printf("package will be sent to router: %d\n" , data->routerId);
-				send_to_next(router, data);
+				SenderArg sender;
+				sender.neighboors = arg->neighboors;
+				sender.routers = arg->routers;
+				send_to_next(&sender, data);
 			}
 		}
 		else{

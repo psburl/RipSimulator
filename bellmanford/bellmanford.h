@@ -15,7 +15,7 @@
 #include <pthread.h>
 
 #define MAX 100
-#define INFINITE 10000
+#define INFINITE 1000
 #define ERRORTRIES 1
 
 typedef struct distanceVector{

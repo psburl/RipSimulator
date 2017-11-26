@@ -115,40 +115,12 @@ DvMessage mountMessage(DvTable myTable,list_t* links, int destination, int poiso
             message.count++;
         }  
     }
-
-    printf("SEND TO %d\n",destination);
-    for(j=0;j<message.count;j++){
-        
-        DistanceVector vector = message.info[j];
-        if(vector.used == 0){
-            continue;
-        }
-
-        if(vector.coust>=INFINITE)
-            printf("%d-INFINITE--|", vector.destination);
-        else 
-            printf("%d-%4.2lf(%d)--|", vector.destination, vector.coust, vector.firstNode);
-    } 
-
     return message;
 }
 
 DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* updated){
 
-    int j;
-    printf("RECEIVE FROM %d\n", message.origin);
-    for(j=0;j<message.count;j++){
-        
-        DistanceVector vector = message.info[j];
-        if(vector.used == 0){
-            continue;
-        }
-
-        if(vector.coust>=INFINITE)
-            printf("%d-INFINITE--|", vector.destination);
-        else 
-            printf("%d-%4.2lf(%d)--|", vector.destination, vector.coust, vector.firstNode);
-    }            
+    printf("RECEIVE FROM %d\n", message.origin);          
 
     int i;
     for(i = 0; i < message.count; i++){
@@ -211,7 +183,7 @@ DvTable updateMyTable(DvTable myTable, list_t* links, DvMessage message, int* up
             DistanceVector vector = myTable.info[i][j];
 
             double sum = coustToThis + vector.coust;
-            if(myTable.info[myTable.origin.id][j].coust > sum){
+            if(myTable.info[myTable.origin.id][j].coust >= sum){
                 myTable.info[myTable.origin.id][j].coust = sum;
                 myTable.info[myTable.origin.id][j].firstNode = i;
                 myTable.info[myTable.origin.id][j].destination = j;
@@ -255,7 +227,7 @@ DvTable updateErrorToSend(DvTable table, list_t* neighboors, int destination, in
             if(table.info[nId][id].used == 1 && 
                 table.info[nId][destination].used == 1 && nId != destination){
                 double sum = link->coust + table.info[nId][destination].coust;
-                if(table.info[id][destination].coust > sum){
+                if(table.info[id][destination].coust >= sum){
                     table.info[id][destination].coust = sum;
                     table.info[id][destination].firstNode = nId;
                 }                   
